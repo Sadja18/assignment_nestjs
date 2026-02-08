@@ -2,10 +2,10 @@ import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { CurrencyModule } from './currency/currency.module';
-import { SchedulerModule } from './scheduler/scheduler.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import databaseConfig from './config/database.config';
+import { ScheduleModule } from '@nestjs/schedule';
 
 /**
  * Root application module wiring all feature modules together.
@@ -43,7 +43,7 @@ import databaseConfig from './config/database.config';
       inject: [ConfigService],
     }),
     CurrencyModule,
-    SchedulerModule,
+    ScheduleModule.forRoot(),
   ],
   controllers: [AppController],
   providers: [AppService],

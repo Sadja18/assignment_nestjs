@@ -5,6 +5,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ExchangeRate } from './entities/exchange-rate.entity';
 import { FrankfurterService } from './frankfurter/frankfurter.service';
 import { HttpModule } from '@nestjs/axios';
+import { SchedularService } from './schedular/schedular.service';
 
 /**
  * Feature module encapsulating all currency-related functionality.
@@ -26,6 +27,6 @@ import { HttpModule } from '@nestjs/axios';
     TypeOrmModule.forFeature([ExchangeRate])
   ],
   controllers: [CurrencyController],
-  providers: [CurrencyService, FrankfurterService],
+  providers: [CurrencyService, FrankfurterService, SchedularService],
 })
 export class CurrencyModule { }

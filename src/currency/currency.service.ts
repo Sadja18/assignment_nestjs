@@ -167,19 +167,19 @@ export class CurrencyService {
       .andWhere('rate.fetchedAt IS NOT NULL') // Safety check
       .getRawMany();
 
-    console.log("latest rates are ", latestRates);
+    console.log("latest rates are ", latestRates?.length);
 
     // Filter to only the newest record per target currency (rn = 1)
     const newestRates = latestRates.filter(row => row.rn === '1');
 
-    if (newestRates.length === 0) {
+    if ( !newestRates || !Array.isArray(newestRates) || newestRates?.length === 0) {
       throw new HttpException(
         `No rates found for base currency: ${base}`,
         HttpStatus.NOT_FOUND
       );
     }
 
-    console.log("newest rates are ", newestRates);
+    console.log("newest rates are ", newestRates.length);
 
 
     // Build result object
