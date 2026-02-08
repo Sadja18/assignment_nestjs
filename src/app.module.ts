@@ -4,6 +4,8 @@ import { AppService } from './app.service';
 import { CurrencyModule } from './currency/currency.module';
 import { SchedulerModule } from './scheduler/scheduler.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import databaseConfig from './config/database.config';
 
 /**
  * Root application module wiring all feature modules together.
@@ -23,18 +25,22 @@ import { TypeOrmModule } from '@nestjs/typeorm';
  */
 @Module({
   imports: [
-    TypeOrmModule.forRoot({
-      type: 'sqlite',
-      database: 'data/dev.db', // Auto-created in dev
-      entities: [__dirname + '/**/*.entity{.ts,.js}'],
-
-      // ⚠️ PROTOTYPING ONLY: Auto-sync schema for rapid iteration
-      // Will be disabled in production (replaced with migrations)
-      synchronize: true,
-
-      // Logging disabled in dev for cleaner output
-      // Will be enabled with Winston in production
-      logging: false,
+    ConfigModule.forRoot({
+      envFilePath: '.env',
+      load: [databaseConfig],
+      isGlobal: true,
+    }),
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: (configService: ConfigService) => {
+        // Force non-nullable return with ! operator
+        const dbConfig = configService.get('database', { infer: true });
+        if (!dbConfig) {
+          throw new Error('Database configuration not found');
+        }
+        return dbConfig;
+      },
+      inject: [ConfigService],
     }),
     CurrencyModule,
     SchedulerModule,

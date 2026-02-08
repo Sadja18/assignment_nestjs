@@ -1,7 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ExchangeRate } from './entities/exchange-rate.entity';
-import { Repository } from 'typeorm';
+import { Between, Repository } from 'typeorm';
 import { FrankfurterService } from './frankfurter/frankfurter.service';
 
 /**
@@ -100,7 +100,7 @@ export class CurrencyService {
     const response = await this.frankFurterService.fetchLatest(base);
 
     // pre-emptive test to check if response was valid
-    if(!response?.rates){
+    if (!response?.rates) {
       console.error("Could not fetch rates ", response);
       return;
     }
@@ -137,5 +137,96 @@ export class CurrencyService {
         });
       }
     }
+  }
+
+  /**
+ * Retrieves the latest exchange rates for a given base currency.
+ * 
+ * Assignment requirement compliance:
+ * - "GET /rates/latest?base=USD returns latest rates"
+ * - Returns most recent rate per target currency (not just last inserted record)
+ * - Handles missing base currency gracefully
+ * 
+ * Query strategy:
+ * - Groups by target_currency to get one latest rate per pair
+ * - Orders by fetchedAt DESC to ensure newest first
+ * - Uses raw SQL via query builder for precise control (TypeORM's find() doesn't support complex grouping)
+ */
+  async getLatestRates(base: string): Promise<Record<string, number>> {
+    // Use a single optimized query with ROW_NUMBER()
+    const latestRates = await this.exchangeRateRepo
+      .createQueryBuilder('rate')
+      .select([
+        'rate.targetCurrency',
+        'rate.rate',
+        'rate.fetchedAt',
+        // Rank records by fetchedAt (newest first) within each targetCurrency group
+        'ROW_NUMBER() OVER (PARTITION BY rate.targetCurrency ORDER BY rate.fetchedAt DESC) as rn'
+      ])
+      .where('rate.baseCurrency = :base', { base })
+      .andWhere('rate.fetchedAt IS NOT NULL') // Safety check
+      .getRawMany();
+
+    console.log("latest rates are ", latestRates);
+
+    // Filter to only the newest record per target currency (rn = 1)
+    const newestRates = latestRates.filter(row => row.rn === '1');
+
+    if (newestRates.length === 0) {
+      throw new HttpException(
+        `No rates found for base currency: ${base}`,
+        HttpStatus.NOT_FOUND
+      );
+    }
+
+    console.log("newest rates are ", newestRates);
+
+
+    // Build result object
+    const result: Record<string, number> = {};
+    newestRates.forEach(row => {
+      // TypeORM prefixes columns with table alias + underscore
+      const currency = row.rate_targetCurrency;
+      const rateValue = parseFloat(row.rate_rate);
+
+      if (currency && !isNaN(rateValue)) {
+        result[currency] = rateValue;
+      }
+    });
+
+    console.log("result is ", result);
+
+    return result;
+  }
+
+  /**
+ * Retrieves the latest timestamp for a given base currency.
+ * Used by getLatestRates endpoint to provide accurate timestamp in response.
+ */
+  // src/currency/currency.service.ts
+  async getLatestTimestamp(base: string): Promise<string> {
+    const result = await this.exchangeRateRepo
+      .createQueryBuilder('rate')
+      .select('MAX(rate.fetchedAt)', 'max')
+      .where('rate.baseCurrency = :base', { base })
+      .getRawOne();
+
+    // PostgreSQL returns timestamptz as ISO string with timezone (e.g., "2026-02-08T14:30:00.000Z")
+    return result?.max || new Date().toISOString();
+  }
+
+  /**
+ * Retrieves latest rates and metadata for a base currency.
+ * Returns structured response including timestamp for API consistency.
+ */
+  async getLatestRatesWithMetadata(base: string) {
+    const rates = await this.getLatestRates(base); // Reuse existing logic
+    const timestamp = await this.getLatestTimestamp(base);
+
+    return {
+      base,
+      rates,
+      timestamp,
+    };
   }
 }

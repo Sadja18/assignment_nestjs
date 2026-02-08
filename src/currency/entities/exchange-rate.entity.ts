@@ -54,7 +54,7 @@ export class ExchangeRate {
      * FUTURE UPGRADE: In PostgreSQL-only mode, could use 'timestamptz'
      * for timezone-aware storage — but unnecessary for this assignment's scope.
      */
-    @Column({ type: 'datetime' })
+    @Column({ type: 'timestamptz' })
     fetchedAt: Date;
 
     /**
