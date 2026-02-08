@@ -172,7 +172,7 @@ export class CurrencyService {
     // Filter to only the newest record per target currency (rn = 1)
     const newestRates = latestRates.filter(row => row.rn === '1');
 
-    if ( !newestRates || !Array.isArray(newestRates) || newestRates?.length === 0) {
+    if (!newestRates || !Array.isArray(newestRates) || newestRates?.length === 0) {
       throw new HttpException(
         `No rates found for base currency: ${base}`,
         HttpStatus.NOT_FOUND
@@ -228,5 +228,42 @@ export class CurrencyService {
       rates,
       timestamp,
     };
+  }
+
+  // this private helper method
+  private getStartDateFromPeriod(period: string): Date {
+    const now = new Date();
+    switch (period) {
+      case '1h': return new Date(now.getTime() - 60 * 60 * 1000);
+      case '6h': return new Date(now.getTime() - 6 * 60 * 60 * 1000);
+      case '12h': return new Date(now.getTime() - 12 * 60 * 60 * 1000);
+      case '24h': return new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      case '7d': return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      default: return new Date(now.getTime() - 24 * 60 * 60 * 1000); // Default 24h
+    }
+  }
+
+  // average calculation
+  async getAverageRate(base: string, target: string, period: string) {
+    const startDate = this.getStartDateFromPeriod(period);
+
+    const result = await this.exchangeRateRepo
+      .createQueryBuilder('rate')
+      .select('AVG(rate.rate)', 'avgRate')
+      .where('rate.baseCurrency = :base', { base })
+      .andWhere('rate.targetCurrency = :target', { target })
+      .andWhere('rate.fetchedAt >= :startDate', { startDate })
+      .getRawOne();
+    
+    console.log("result for average rate is ", result);
+
+    if (!result?.avgRate) {
+      throw new HttpException(
+        `No rates found for ${base}→${target} in period ${period}`,
+        HttpStatus.NOT_FOUND
+      );
+    }
+
+    return parseFloat(result.avgRate);
   }
 }

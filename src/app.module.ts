@@ -6,6 +6,9 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import databaseConfig from './config/database.config';
 import { ScheduleModule } from '@nestjs/schedule';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
+import { ApiKeyGuard } from './common/guards/api-key.gaurd';
 
 /**
  * Root application module wiring all feature modules together.
@@ -42,10 +45,23 @@ import { ScheduleModule } from '@nestjs/schedule';
       },
       inject: [ConfigService],
     }),
+    ThrottlerModule.forRoot([
+      {
+        ttl: parseInt(`${process.env.THROTTLE_TTL}`, 10) || 60000,
+        limit: parseInt(`${process.env.THROTTLE_LIMIT}`, 10) || 10,
+        ignoreUserAgents: [/^node-superagent/], // Optional: skip health checks
+      },
+    ]),
     CurrencyModule,
     ScheduleModule.forRoot(),
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ApiKeyGuard,
+    },
+    AppService,
+  ],
 })
 export class AppModule { }

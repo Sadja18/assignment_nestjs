@@ -19,7 +19,7 @@ export default registerAs('database', () => {
         password: parsed.password,
         database: parsed.database,
         ssl: parsed.ssl !== undefined ? parsed.ssl : true, // Neon requires SSL
-        synchronize: true, // Disable in production!
+        synchronize: false, // Disable in production!
         logging: process.env.NODE_ENV === 'development',
         entities: [__dirname + '/../**/*.entity{.ts,.js}'],
     };

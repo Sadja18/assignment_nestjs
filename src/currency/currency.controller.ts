@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Query, HttpException, HttpStatus } from '@nestjs/common';
 import { CurrencyService } from './currency.service';
 import { LatestRatesDto } from './dto/latest-rates.dto';
+import { AverageRatesDto } from './dto/average-rates.dto';
 
 /**
  * REST API endpoints for currency rate operations.
@@ -40,10 +41,10 @@ export class CurrencyController {
  * Fetches latest exchange rates from Frankfurter API and stores them in the database.
  * 
  * Assignment requirement compliance:
- * - "POST /rates/fetch triggers fetching from third party API" ✅
- * - "Handle API failures gracefully (timeouts, retries)" ✅
+ * - "POST /rates/fetch triggers fetching from third party API"
+ * - "Handle API failures gracefully (timeouts, retries)"
  *   (Handled internally by FrankfurterService with retry logic)
- * - "Support at least 5 target currencies" ✅
+ * - "Support at least 5 target currencies"
  *   (USD → INR, EUR, GBP, JPY, CAD by default)
  * 
  * Error handling:
@@ -77,9 +78,9 @@ export class CurrencyController {
  * Returns the latest exchange rates for a given base currency.
  * 
  * Assignment requirement compliance:
- * - "GET /rates/latest?base=USD returns latest rates" ✅
- * - Supports query parameter 'base' with default USD ✅
- * - Returns clean JSON response with target currencies as keys ✅
+ * - "GET /rates/latest?base=USD returns latest rates"
+ * - Supports query parameter 'base' with default USD
+ * - Returns clean JSON response with target currencies as keys
  * 
  * Response format:
  * {
@@ -106,6 +107,32 @@ export class CurrencyController {
             }
             throw new HttpException(
                 'Internal error while fetching latest rates',
+                HttpStatus.INTERNAL_SERVER_ERROR
+            );
+        }
+    }
+
+    @Get('average')
+    async getAverageRates(@Query() query: AverageRatesDto) {
+        try {
+            const average = await this.currencyService.getAverageRate(
+                query.base,
+                query.target,
+                query.period
+            );
+
+            return {
+                base: query.base,
+                target: query.target,
+                period: query.period,
+                average: Number(average.toFixed(6)),
+            };
+        } catch (error) {
+            if (error instanceof HttpException) {
+                throw error;
+            }
+            throw new HttpException(
+                'Error calculating average rate',
                 HttpStatus.INTERNAL_SERVER_ERROR
             );
         }

@@ -1,0 +1,45 @@
+.
+├── Dockerfile
+├── eslint.config.mjs
+├── LICENSE
+├── nest-cli.json
+├── out.txt
+├── package.json
+├── package-lock.json
+├── README.md
+├── src
+│   ├── app.controller.spec.ts
+│   ├── app.controller.ts
+│   ├── app.module.ts
+│   ├── app.service.ts
+│   ├── common
+│   │   └── structured-logger.ts
+│   ├── config
+│   │   └── database.config.ts
+│   ├── currency
+│   │   ├── currency.controller.ts
+│   │   ├── currency.module.ts
+│   │   ├── currency.service.spec.ts
+│   │   ├── currency.service.ts
+│   │   ├── dto
+│   │   │   ├── average-rates.dto.ts
+│   │   │   └── latest-rates.dto.ts
+│   │   ├── entities
+│   │   │   └── exchange-rate.entity.ts
+│   │   ├── frankfurter
+│   │   │   ├── frankfurter.service.spec.ts
+│   │   │   └── frankfurter.service.ts
+│   │   ├── schedular
+│   │   │   ├── schedular.service.spec.ts
+│   │   │   └── schedular.service.ts
+│   │   ├── services
+│   │   └── types
+│   │       └── frankfurter.types.ts
+│   └── main.ts
+├── test
+│   ├── app.e2e-spec.ts
+│   └── jest-e2e.json
+├── tsconfig.build.json
+└── tsconfig.json
+
+12 directories, 31 files

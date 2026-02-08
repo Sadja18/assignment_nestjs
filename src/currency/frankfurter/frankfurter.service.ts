@@ -35,6 +35,7 @@ export class FrankfurterService {
      * @returns Promise<{ date: string; rates: Record<string, number> }>
      */
     async fetchLatest(base: string = 'USD', targets: string[] = this.defaultTargets) {
+        this.logger.debug('Fetching rates', 'FrankfurterService', { base, targets });
         const symbols = targets.join(',');
 
         for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
@@ -52,7 +53,10 @@ export class FrankfurterService {
                 );
 
                 const { data } = await firstValueFrom(response$);
-                this.logger.log(`Successfully fetched rates for ${base} → [${symbols}]`);
+                this.logger.log('Rates fetched successfully', 'FrankfurterService', {
+                    base,
+                    count: targets.length
+                });
                 return this.validateResponse(data);
             } catch (error) {
                 const isLastAttempt = attempt === this.maxRetries;
@@ -66,7 +70,10 @@ export class FrankfurterService {
                     );
                 }
 
-                this.logger.warn(`Retrying in ${delayMs}ms...`);
+                this.logger.error('Fetch failed', 'FrankfurterService', error.stack, {
+                    base,
+                    error: error.message
+                });
                 await this.sleep(delayMs);
             }
         }

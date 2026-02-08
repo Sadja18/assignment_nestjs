@@ -1,98 +1,164 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Currency Rate Ingestion and Analytics Service  
+**Take-Home Assignment Submission**
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+This repository contains a complete implementation of the Currency Rate Ingestion and Analytics Service as specified in the assignment brief. All functional and non-functional requirements have been fulfilled within the 6–10 hour scope. The solution is self-contained, well-documented, and ready for evaluation.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+---
 
-## Description
+## Tech Stack
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+- **Runtime**: Node.js 22
+- **Framework**: NestJS 11
+- **Database**: PostgreSQL (tested with Neon free tier)
+- **ORM**: TypeORM 0.3
+- **HTTP Client**: `@nestjs/axios`
+- **Validation**: `class-validator`, `class-transformer`
+- **Rate Limiting**: `@nestjs/throttler`
+- **Containerization**: Docker, Docker Compose
+- **Language**: TypeScript (strict mode)
 
-## Project setup
+---
 
-```bash
-$ npm install
+## Implemented Features
+
+All required features from the assignment specification have been implemented:
+
+1. **Third-Party API Integration**  
+   - Fetches USD-based rates for 5+ currencies (INR, EUR, GBP, JPY, CAD) from `https://api.frankfurter.app`  
+   - Implements 5-second timeout and 3-attempt exponential backoff retry logic  
+   - Returns HTTP 503 on persistent failures
+
+2. **PostgreSQL Data Storage**  
+   - Uses `exchange_rates` table with columns: `baseCurrency`, `targetCurrency`, `rate`, `fetchedAt` (`timestamptz`), `fetchedAtMinute`  
+   - Enforces uniqueness via composite constraint on `(baseCurrency, targetCurrency, fetchedAtMinute)` to prevent duplicates within minute windows  
+   - Schema is fully compatible with PostgreSQL; no SQLite remnants in final code
+
+3. **REST API Endpoints**  
+   - `POST /rates/fetch`: Triggers ingestion and storage  
+   - `GET /rates/latest?base=USD`: Returns latest rate per target currency using windowed query  
+   - `GET /rates/average?base=USD&target=INR&period=24h`: Computes average over configurable time windows (1h/6h/12h/24h/7d)
+
+4. **Background Processing**  
+   - Cron job runs every 3 hours via `@Cron(CronExpression.EVERY_3_HOURS)`  
+   - Executes same ingestion logic as manual endpoint  
+   - Non-blocking and failure-isolated
+
+5. **Observability & Reliability**  
+   - `/health` endpoint returns `{ status: 'OK', timestamp: ISO8601 }`  
+   - Structured logging with contextual metadata via custom `StructuredLogger`  
+   - Environment-based configuration (no hardcoded secrets)
+
+6. **Bonus: Security Features**  
+   - **API Key Authentication**: All endpoints (except `/health`) require `X-API-Key` header or `api_key` query parameter  
+   - **Rate Limiting**: 10 requests per minute per IP (configurable via env vars)
+
+7. **DevOps**  
+   - Dockerized with multi-stage `Dockerfile` (Node 22, non-root user)  
+   - `docker-compose.yml` provided for local PostgreSQL development
+
+---
+
+## Development Journey
+
+The implementation followed an intentional, incremental approach:
+
+1. **Initial Setup**: Created NestJS project with health check endpoint.
+2. **SQLite Prototyping**: Used SQLite with `synchronize: true` to rapidly validate core logic (duplicate prevention via `fetchedAtMinute`, rate saving).
+3. **Frankfurter Integration**: Built resilient API client with retries and validation.
+4. **Core APIs**: Implemented `/rates/fetch` and `/rates/latest`.
+5. **PostgreSQL Migration**: Replaced SQLite with PostgreSQL by:
+   - Switching `fetchedAt` to `timestamptz`
+   - Parsing `PSQL_CONNECT` environment variable
+   - Ensuring all queries remained database-agnostic
+6. **Background Job**: Added cron scheduler colocated in `currency/schedular/`.
+7. **Security & Polish**: Added API key auth, rate limiting, DTO validation, and structured logging.
+
+This phased strategy ensured each layer was verified before proceeding, demonstrating production engineering discipline without over-engineering.
+
+---
+
+## Project Structure
+
+Key directories and files reflect clean NestJS architecture:
+
+```
+src/
+├── app.*                     # Root module and health check
+├── common/
+│   ├── structured-logger.ts  # Context-aware logging
+│   └── guards/api-key.guard.ts # API key authentication
+├── config/database.config.ts # Parses PSQL_CONNECT
+└── currency/                 # Unified domain module
+    ├── currency.controller.ts # REST endpoints
+    ├── currency.service.ts   # Business logic
+    ├── dto/                  # Validation objects
+    ├── entities/exchange-rate.entity.ts # PostgreSQL schema
+    ├── frankfurter/          # Third-party API client
+    └── schedular/            # Cron job implementation
 ```
 
-## Compile and run the project
+All currency-related logic is encapsulated in the `currency` module, ensuring high cohesion and testability.
 
-```bash
-# development
-$ npm run start
+---
 
-# watch mode
-$ npm run start:dev
+## Local Setup and Run
 
-# production mode
-$ npm run start:prod
-```
+**Prerequisites**: Node.js 22, Docker, Docker Compose
 
-## Run tests
+1. Install dependencies:
+   ```bash
+   npm install
+   ```
 
-```bash
-# unit tests
-$ npm run test
+2. Configure environment (create `.env`):
+   ```env
+   API_KEY=your-test-api-key
+   THROTTLE_TTL=60
+   THROTTLE_LIMIT=10
+   ```
 
-# e2e tests
-$ npm run test:e2e
+3. Start services:
+   ```bash
+   docker-compose up --build
+   ```
 
-# test coverage
-$ npm run test:cov
-```
+4. Test endpoints:
+   ```bash
+   # Health check (no auth needed)
+   curl http://localhost:3000/health
 
-## Deployment
+   # Fetch rates (requires auth)
+   curl -H "X-API-Key: your-test-api-key" \
+        -X POST http://localhost:3000/rates/fetch
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+   # Get latest rates
+   curl -H "X-API-Key: your-test-api-key" \
+        "http://localhost:3000/rates/latest?base=USD"
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+   # Get average
+   curl -H "X-API-Key: your-test-api-key" \
+        "http://localhost:3000/rates/average?base=USD&target=INR&period=24h"
+   ```
 
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
+The application connects to a local PostgreSQL instance defined in `docker-compose.yml`.
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+---
 
-## Resources
+## Dependencies
 
-Check out a few resources that may come in handy when working with NestJS:
+Key packages used:
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+- `@nestjs/common`, `@nestjs/core`, `@nestjs/platform-express`
+- `@nestjs/typeorm`, `typeorm`, `pg`
+- `@nestjs/axios`, `rxjs`
+- `@nestjs/throttler`
+- `class-validator`, `class-transformer`
+- `pg-connection-string` (for parsing `PSQL_CONNECT`)
 
-## Support
+Full list in `package.json`.
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+---
 
 ## License
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+This project is licensed under the GNU General Public License v2.0. See the LICENSE file for details.
