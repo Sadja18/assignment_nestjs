@@ -1,5 +1,6 @@
 import { Controller, Get } from '@nestjs/common';
 import { AppService } from './app.service';
+import { SkipThrottle } from '@nestjs/throttler';
 
 /**
  * Root application endpoints providing system-level functionality.
@@ -38,6 +39,7 @@ export class AppController {
    * - Currently basic implementation
    * - Will be enhanced to check critical dependencies (DB, Frankfurter API)
    */
+  @SkipThrottle()
   @Get('health')
   getHealth() {
     return {

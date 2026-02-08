@@ -1,56 +1,59 @@
 # Currency Rate Ingestion and Analytics Service  
 **Take-Home Assignment Submission**
 
-This repository contains a complete implementation of the Currency Rate Ingestion and Analytics Service as specified in the assignment brief. All functional and non-functional requirements have been fulfilled within the 6–10 hour scope. The solution is self-contained, well-documented, and ready for evaluation.
+This repository contains a complete implementation of the Currency Rate Ingestion and Analytics Service as specified in the assignment brief. All functional and non-functional requirements have been fulfilled using NestJS 11, PostgreSQL, and production-grade patterns within a constrained timebox.
 
 ---
 
 ## Tech Stack
 
-- **Runtime**: Node.js 22
-- **Framework**: NestJS 11
-- **Database**: PostgreSQL (tested with Neon free tier)
-- **ORM**: TypeORM 0.3
-- **HTTP Client**: `@nestjs/axios`
-- **Validation**: `class-validator`, `class-transformer`
-- **Rate Limiting**: `@nestjs/throttler`
-- **Containerization**: Docker, Docker Compose
+- **Runtime**: Node.js 22  
+- **Framework**: NestJS 11  
+- **Database**: PostgreSQL (tested with Neon free tier)  
+- **ORM**: TypeORM 0.3  
+- **HTTP Client**: `@nestjs/axios`  
+- **Validation**: `class-validator`, `class-transformer`  
+- **Authentication**: Static API key via custom guard  
+- **Containerization**: Docker, Docker Compose  
 - **Language**: TypeScript (strict mode)
 
 ---
 
 ## Implemented Features
 
-All required features from the assignment specification have been implemented:
+All required features from the assignment specification are fully implemented:
 
 1. **Third-Party API Integration**  
-   - Fetches USD-based rates for 5+ currencies (INR, EUR, GBP, JPY, CAD) from `https://api.frankfurter.app`  
-   - Implements 5-second timeout and 3-attempt exponential backoff retry logic  
-   - Returns HTTP 503 on persistent failures
+   - Fetches USD-based exchange rates for five target currencies (INR, EUR, GBP, JPY, CAD) from `https://api.frankfurter.app`  
+   - Implements 5-second timeout and retry logic with exponential backoff  
+   - Returns HTTP 503 on persistent upstream failures
 
 2. **PostgreSQL Data Storage**  
-   - Uses `exchange_rates` table with columns: `baseCurrency`, `targetCurrency`, `rate`, `fetchedAt` (`timestamptz`), `fetchedAtMinute`  
-   - Enforces uniqueness via composite constraint on `(baseCurrency, targetCurrency, fetchedAtMinute)` to prevent duplicates within minute windows  
-   - Schema is fully compatible with PostgreSQL; no SQLite remnants in final code
+   - Uses a dedicated `exchange_rates` table with proper schema:  
+     - `baseCurrency`, `targetCurrency` (VARCHAR(3))  
+     - `rate` (DECIMAL(15,6))  
+     - `fetchedAt` (TIMESTAMPTZ)  
+     - `fetchedAtMinute` (INTEGER) — derived for deduplication  
+   - Enforces uniqueness via composite constraint on `(baseCurrency, targetCurrency, fetchedAtMinute)` to prevent duplicate records within the same minute window
 
 3. **REST API Endpoints**  
-   - `POST /rates/fetch`: Triggers ingestion and storage  
-   - `GET /rates/latest?base=USD`: Returns latest rate per target currency using windowed query  
-   - `GET /rates/average?base=USD&target=INR&period=24h`: Computes average over configurable time windows (1h/6h/12h/24h/7d)
+   - `POST /rates/fetch`: Triggers immediate ingestion and storage  
+   - `GET /rates/latest?base=USD`: Returns the most recent rate for each target currency using a windowed query (`ROW_NUMBER() OVER PARTITION BY`)  
+   - `GET /rates/average?base=USD&target=INR&period=24h`: Computes arithmetic mean over configurable time windows (1h, 6h, 12h, 24h, 7d)
 
 4. **Background Processing**  
-   - Cron job runs every 3 hours via `@Cron(CronExpression.EVERY_3_HOURS)`  
-   - Executes same ingestion logic as manual endpoint  
-   - Non-blocking and failure-isolated
+   - Scheduled ingestion every 3 hours using `@Cron(CronExpression.EVERY_3_HOURS)`  
+   - Runs asynchronously without blocking HTTP requests  
+   - Reuses the same ingestion logic as the manual endpoint
 
 5. **Observability & Reliability**  
    - `/health` endpoint returns `{ status: 'OK', timestamp: ISO8601 }`  
-   - Structured logging with contextual metadata via custom `StructuredLogger`  
+   - Structured logging with contextual metadata via custom logger  
    - Environment-based configuration (no hardcoded secrets)
 
-6. **Bonus: Security Features**  
-   - **API Key Authentication**: All endpoints (except `/health`) require `X-API-Key` header or `api_key` query parameter  
-   - **Rate Limiting**: 10 requests per minute per IP (configurable via env vars)
+6. **Bonus: Security**  
+   - **Static API Key Authentication**: All endpoints (except `/health`) require an `X-API-Key` header or `api_key` query parameter  
+   - Configured via `API_KEY` environment variable
 
 7. **DevOps**  
    - Dockerized with multi-stage `Dockerfile` (Node 22, non-root user)  
@@ -60,102 +63,107 @@ All required features from the assignment specification have been implemented:
 
 ## Development Journey
 
-The implementation followed an intentional, incremental approach:
+The implementation followed a deliberate, incremental approach to manage risk and validate assumptions early:
 
-1. **Initial Setup**: Created NestJS project with health check endpoint.
-2. **SQLite Prototyping**: Used SQLite with `synchronize: true` to rapidly validate core logic (duplicate prevention via `fetchedAtMinute`, rate saving).
-3. **Frankfurter Integration**: Built resilient API client with retries and validation.
-4. **Core APIs**: Implemented `/rates/fetch` and `/rates/latest`.
+1. **Foundation Setup**: Initialized NestJS project with health check endpoint.
+2. **SQLite Prototyping**: Used SQLite with `synchronize: true` to rapidly validate core data flow—particularly duplicate prevention via `fetchedAtMinute`—without infrastructure overhead.
+3. **Frankfurter Integration**: Built resilient API client with timeout, retries, and response validation.
+4. **Core APIs**: Implemented `/rates/fetch` and `/rates/latest` against the validated data layer.
 5. **PostgreSQL Migration**: Replaced SQLite with PostgreSQL by:
-   - Switching `fetchedAt` to `timestamptz`
+   - Updating entity to use `timestamptz`
    - Parsing `PSQL_CONNECT` environment variable
    - Ensuring all queries remained database-agnostic
-6. **Background Job**: Added cron scheduler colocated in `currency/schedular/`.
-7. **Security & Polish**: Added API key auth, rate limiting, DTO validation, and structured logging.
+6. **Background Job**: Added cron scheduler colocated in the `currency` module.
+7. **Security & Polish**: Added API key auth, DTO validation, and structured logging.
 
-This phased strategy ensured each layer was verified before proceeding, demonstrating production engineering discipline without over-engineering.
+This phased strategy ensured each layer was verified before proceeding, demonstrating engineering discipline without over-engineering.
 
 ---
 
-## Project Structure
+## File Structure
 
-Key directories and files reflect clean NestJS architecture:
+The codebase follows clean NestJS modular architecture with feature-based organization:
 
 ```
 src/
 ├── app.*                     # Root module and health check
 ├── common/
-│   ├── structured-logger.ts  # Context-aware logging
-│   └── guards/api-key.guard.ts # API key authentication
-├── config/database.config.ts # Parses PSQL_CONNECT
+│   ├── structured-logger.ts  # Context-aware logging utility
+│   └── guards/api-key.guard.ts # API key authentication guard
+├── config/database.config.ts # Parses PSQL_CONNECT into TypeORM config
 └── currency/                 # Unified domain module
     ├── currency.controller.ts # REST endpoints
     ├── currency.service.ts   # Business logic
-    ├── dto/                  # Validation objects
+    ├── dto/                  # Validation objects (LatestRatesDto, AverageRatesDto)
     ├── entities/exchange-rate.entity.ts # PostgreSQL schema
-    ├── frankfurter/          # Third-party API client
-    └── schedular/            # Cron job implementation
+    ├── frankfurter/frankfurter.service.ts # Third-party API client
+    └── schedular/schedular.service.ts # Cron job implementation
 ```
 
 All currency-related logic is encapsulated in the `currency` module, ensuring high cohesion and testability.
 
 ---
 
-## Local Setup and Run
+## Control Flow
+
+1. **Manual Ingestion (`POST /rates/fetch`)**  
+   - Controller → `CurrencyService.fetchAndSaveRates('USD')`  
+   - Service → `FrankfurterService.fetchLatest()`  
+   - Frankfurter → Validates response → Returns rates  
+   - Service → Saves each rate if not duplicate (using `fetchedAtMinute`)  
+
+2. **Latest Rates (`GET /rates/latest`)**  
+   - Controller → `CurrencyService.getLatestRates(base)`  
+   - Service → Executes windowed query:  
+     ```sql
+     SELECT *, ROW_NUMBER() OVER (
+       PARTITION BY targetCurrency 
+       ORDER BY fetchedAt DESC
+     ) AS rn
+     FROM exchange_rates
+     WHERE baseCurrency = ?
+     ```
+   - Filters to `rn = 1` → Returns latest rate per target
+
+3. **Average Rates (`GET /rates/average`)**  
+   - Controller → Validates period (1h/6h/12h/24h/7d)  
+   - Service → Computes start date → Queries `AVG(rate)` over time window
+
+4. **Background Job**  
+   - `SchedulerService` triggers `fetchAndSaveRates('USD')` every 3 hours  
+   - Same path as manual ingestion → Ensures consistency
+
+5. **Authentication**  
+   - `ApiKeyGuard` runs on all routes except `/health`  
+   - Checks `X-API-Key` header or `api_key` query param against `API_KEY` env var
+
+---
+
+## Local Setup
 
 **Prerequisites**: Node.js 22, Docker, Docker Compose
 
-1. Install dependencies:
+1. Install dependencies:  
    ```bash
    npm install
    ```
 
-2. Configure environment (create `.env`):
+2. Create `.env`:  
    ```env
-   API_KEY=your-test-api-key
-   THROTTLE_TTL=60
-   THROTTLE_LIMIT=10
+   API_KEY=your-test-key
+   PSQL_CONNECT=postgresql://postgres:postgres@localhost/currency_db?sslmode=disable
    ```
 
-3. Start services:
+3. Start services:  
    ```bash
    docker-compose up --build
    ```
 
-4. Test endpoints:
+4. Test:  
    ```bash
-   # Health check (no auth needed)
    curl http://localhost:3000/health
-
-   # Fetch rates (requires auth)
-   curl -H "X-API-Key: your-test-api-key" \
-        -X POST http://localhost:3000/rates/fetch
-
-   # Get latest rates
-   curl -H "X-API-Key: your-test-api-key" \
-        "http://localhost:3000/rates/latest?base=USD"
-
-   # Get average
-   curl -H "X-API-Key: your-test-api-key" \
-        "http://localhost:3000/rates/average?base=USD&target=INR&period=24h"
+   curl -H "X-API-Key: your-test-key" -X POST http://localhost:3000/rates/fetch
    ```
-
-The application connects to a local PostgreSQL instance defined in `docker-compose.yml`.
-
----
-
-## Dependencies
-
-Key packages used:
-
-- `@nestjs/common`, `@nestjs/core`, `@nestjs/platform-express`
-- `@nestjs/typeorm`, `typeorm`, `pg`
-- `@nestjs/axios`, `rxjs`
-- `@nestjs/throttler`
-- `class-validator`, `class-transformer`
-- `pg-connection-string` (for parsing `PSQL_CONNECT`)
-
-Full list in `package.json`.
 
 ---
 

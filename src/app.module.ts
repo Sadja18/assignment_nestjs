@@ -6,7 +6,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import databaseConfig from './config/database.config';
 import { ScheduleModule } from '@nestjs/schedule';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { ApiKeyGuard } from './common/guards/api-key.gaurd';
 
@@ -47,9 +47,10 @@ import { ApiKeyGuard } from './common/guards/api-key.gaurd';
     }),
     ThrottlerModule.forRoot([
       {
-        ttl: parseInt(`${process.env.THROTTLE_TTL}`, 10) || 60000,
+        ttl: parseInt(`${process.env.THROTTLE_TTL}`, 10) || 60,
         limit: parseInt(`${process.env.THROTTLE_LIMIT}`, 10) || 10,
         ignoreUserAgents: [/^node-superagent/], // Optional: skip health checks
+
       },
     ]),
     CurrencyModule,
@@ -60,6 +61,10 @@ import { ApiKeyGuard } from './common/guards/api-key.gaurd';
     {
       provide: APP_GUARD,
       useClass: ApiKeyGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard, // for rate limiting
     },
     AppService,
   ],

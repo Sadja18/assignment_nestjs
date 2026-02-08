@@ -2,6 +2,7 @@ import { Controller, Get, Post, Query, HttpException, HttpStatus } from '@nestjs
 import { CurrencyService } from './currency.service';
 import { LatestRatesDto } from './dto/latest-rates.dto';
 import { AverageRatesDto } from './dto/average-rates.dto';
+import { SkipThrottle } from '@nestjs/throttler';
 
 /**
  * REST API endpoints for currency rate operations.
@@ -111,7 +112,7 @@ export class CurrencyController {
             );
         }
     }
-
+    
     @Get('average')
     async getAverageRates(@Query() query: AverageRatesDto) {
         try {
@@ -146,6 +147,7 @@ export class CurrencyController {
      * - Complements root /health endpoint
      * - Helps diagnose partial failures in production
      */
+    @SkipThrottle()
     @Get('health')
     health() {
         return { currencyModule: 'OK' };
